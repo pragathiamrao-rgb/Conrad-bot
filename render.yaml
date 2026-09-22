@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: conrad
+    runtime: python
+    plan: starter            # a paid plan is needed for the persistent disk that keeps accounts and chats
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    disk:
+      name: conrad-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false          # you paste this in the Render dashboard
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CONRAD_DB
+        value: /var/data/conrad.db
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: PYTHON_VERSION
+        value: 3.12.3
