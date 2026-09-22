@@ -1,27 +1,24 @@
-# Conrad, romantic AI companion website
+# Conrad — Gemini-powered version
 
-## Run it
+Same website as the Anthropic version, but the AI replies come from Google's
+Gemini API instead of Claude.
+
+## Run it locally
 ```bash
-cd conrad-app
-python3 -m venv venv && source venv/bin/activate       # Windows: venv\\Scripts\\activate
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY="your-key"                     # Windows: set ANTHROPIC_API_KEY=your-key
-export SECRET_KEY="any-long-random-string"              # keeps logins alive across restarts
+export GEMINI_API_KEY="your-key-from-aistudio.google.com"
+export SECRET_KEY="any-long-random-string"
 python server.py
 ```
 Open http://localhost:5000
 
-## Features
-- Landing page, signup / login (hashed passwords, 30-day sessions), light and dark theme
-- Real-boyfriend Conrad: full emotional range, split texts, his own feeling shown next to yours
-- Background scene, falling or floating effects and emoji suggestions change with your mood
-- Enter sends the message. Right-now panel shows your mood and Conrad's
-- Weekly mood journal, daily note, streak stats, situations and moments buttons
-- About me: nickname and things Conrad should remember (saved on the server)
-- Clear chat, log out
+## Deploy
+- **Labskraft or any Linux VM:** see `DEPLOY_LABSKRAFT.md`.
+- **PythonAnywhere:** upload this folder, `pip3.12 install --user google-genai flask`,
+  then use `pythonanywhere_wsgi.py` (fill in your username and Gemini key).
 
 ## Customise
-- Personality: `PERSONA` and `MODES` in `server.py`. Scenes and emoji sets: `SCENES` and `EMO` in `static/index.html`.
-
-## Before going public
-HTTPS, email verification and password reset, Postgres instead of SQLite, per-user usage limits (every message costs API credits).
+Conrad's personality, modes and emotional-intensity settings are all in `server.py`
+(`PERSONA`, `MODES`, `INT`) — identical to the Claude version. The model name is set by
+`CONRAD_MODEL`, default `gemini-2.5-flash`.
