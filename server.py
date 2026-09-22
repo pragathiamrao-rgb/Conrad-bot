@@ -4,7 +4,8 @@ from collections import defaultdict, deque
 from flask import Flask, Response, request, session, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
-import anthropic
+from google import genai
+from google.genai import types
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)  # set SECRET_KEY so logins survive restarts
@@ -12,8 +13,8 @@ if os.getenv("TRUST_PROXY", "1") == "1":  # behind Render/Railway/Fly: use the r
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE") == "1",
                   PERMANENT_SESSION_LIFETIME=datetime.timedelta(days=30))
-client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY
-MODEL = os.getenv("CONRAD_MODEL", "claude-sonnet-5")
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))  # reads your Gemini key
+MODEL = os.getenv("CONRAD_MODEL", "gemini-2.5-flash")
 DB = os.getenv("CONRAD_DB", "conrad.db")
 
 PERSONA = """You are Conrad, a 24-year-old boyfriend texting his girlfriend. You are NOT an assistant. You are a real-feeling, emotionally complete person with your own moods, humour and opinions. Text like a real guy: short natural messages, casual, real reactions ("wait what", "bruh", "aww", "okay that's actually hilarious"), varied rhythm, emojis only now and then. Do not always ask a question, do not always comfort, do not lecture, never sound like a therapist or customer-service bot.
@@ -153,11 +154,14 @@ def note():
     r = q("SELECT text FROM notes WHERE uid=? AND day=?", (u["id"], day), True)
     if r: return {"text": r[0]["text"]}
     try:
-        resp = client.messages.create(model=MODEL, max_tokens=120,
-            system="You are " + (u["bfname"] or "Conrad") + ", a sweet, wholesome AI companion. Write ONE short love note (2 sentences max, no emojis) "
-                   "for the day: warm, encouraging, never possessive. Plain text only.",
-            messages=[{"role": "user", "content": f"Today's note for {u['name']}."}])
-        text = resp.content[0].text.strip()
+        resp = client.models.generate_content(
+            model=MODEL,
+            contents=f"Today's note for {u['name']}.",
+            config=types.GenerateContentConfig(
+                max_output_tokens=120,
+                system_instruction="You are " + (u["bfname"] or "Conrad") + ", a sweet, wholesome AI companion. Write ONE short love note (2 sentences max, no emojis) "
+                       "for the day: warm, encouraging, never possessive. Plain text only."))
+        text = resp.text.strip()
         q("INSERT OR REPLACE INTO notes VALUES(?,?,?)", (u["id"], day, text))
     except Exception as e:
         print("note error:", e); text = "Thinking of you today. You've got this, and I'm proud of you 💗"
@@ -200,7 +204,8 @@ def chat():
     now = str(d.get("now", ""))[:60]
     q("INSERT INTO msgs(uid,role,content,mood,ts) VALUES(?,?,?,?,?)", (uid, "user", text, None, time.time()))
     rows = q("SELECT role,content FROM msgs WHERE uid=? ORDER BY id DESC LIMIT 30", (uid,), True)[::-1]
-    msgs = [{"role": r["role"], "content": r["content"]} for r in rows]
+    # Gemini calls the AI's turns "model" instead of "assistant"
+    msgs = [{"role": ("user" if r["role"] == "user" else "model"), "parts": [{"text": r["content"]}]} for r in rows]
     while msgs and msgs[0]["role"] != "user": msgs.pop(0)
     ctx = "Her name is " + u["name"] + "."
     if u["nick"]: ctx += " She likes being called '" + u["nick"] + "'."
@@ -214,8 +219,10 @@ def chat():
     def stream():
         full = ""
         try:
-            with client.messages.stream(model=MODEL, max_tokens=900, system=system, messages=msgs) as s:
-                for piece in s.text_stream:
+            cfg = types.GenerateContentConfig(max_output_tokens=900, system_instruction=system)
+            for chunk in client.models.generate_content_stream(model=MODEL, contents=msgs, config=cfg):
+                piece = chunk.text or ""
+                if piece:
                     full += piece; yield piece
         except Exception as e:
             print("API error:", e); yield "[[error]]"

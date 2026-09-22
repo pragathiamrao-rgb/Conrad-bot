@@ -1,0 +1,19 @@
+# Optional: keeps Conrad running after reboots / crashes on a Linux VM.
+# Copy to /etc/systemd/system/conrad.service (edit the two paths and User= line first), then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now conrad
+[Unit]
+Description=Conrad chatbot
+After=network.target
+
+[Service]
+User=YOURLINUXUSER
+WorkingDirectory=/home/YOURLINUXUSER/conrad-app-gemini
+Environment="GEMINI_API_KEY=PASTE-YOUR-GEMINI-KEY-HERE"
+Environment="SECRET_KEY=type-a-long-random-text-here-at-least-30-characters"
+Environment="CONRAD_DB=/home/YOURLINUXUSER/conrad-app-gemini/conrad.db"
+ExecStart=/home/YOURLINUXUSER/conrad-app-gemini/venv/bin/gunicorn server:app --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
